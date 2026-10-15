@@ -38,7 +38,9 @@ jobs:
           SUFFIX=""
           if [ "$GOOS" = "windows" ]; then SUFFIX=".exe"; fi
           mkdir -p dist
-          go build -trimpath -ldflags "-s -w" -o "dist/gopoker-${GOOS}-${GOARCH}${SUFFIX}" .
+          # CGO_ENABLED=0 → binaire statique portable (dont Alpine/musl)
+          CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" \
+            -o "dist/gopoker-${GOOS}-${GOARCH}${SUFFIX}" .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

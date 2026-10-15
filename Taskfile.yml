@@ -5,9 +5,9 @@ tasks:
     deps: [build]
 
   build:
-    desc: "Compile le binaire"
+    desc: "Compile le binaire (statique)"
     cmds:
-      - go build -o gopoker .
+      - CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o gopoker .
 
   run:
     desc: "Lance le serveur | PORT=<port> (défaut: 8080)"
@@ -19,14 +19,14 @@ tasks:
   dev:
     desc: "Compile puis lance | PORT=<port> (défaut: 8080)"
     cmds:
-      - go build -o gopoker . && ./gopoker
+      - CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o gopoker . && ./gopoker
     env:
       PORT: '{{.PORT | default "8080"}}'
 
   run-daemon:
     desc: "Compile et lance en arrière-plan (daemon) | PORT=<port> (défaut: 8080), logs dans gopoker.log"
     cmds:
-      - go build -o gopoker .
+      - CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o gopoker .
       - "./gopoker > gopoker.log 2>&1 &"
       - "echo 'Poker lancé en daemon. Logs: ./gopoker.log'"
     env:
