@@ -19,6 +19,12 @@ Estimation agile en temps réel basée sur la suite de Fibonacci, en Go.
 
 Le binaire `gopoker` est un exécutable autonome : pas de dépendance, pas d'installation.
 
+**Téléchargement** : les binaires des releases sont disponibles sur
+<https://github.com/afornerot/gopoker/releases> (choisir la version, puis le
+binaire correspondant à sa plateforme, ex. `gopoker-linux-amd64`).
+Sur Linux/macOS, rendre le fichier exécutable au besoin : `chmod +x gopoker-linux-amd64`.
+Pour un binaire au fil de l'eau, compiler soi-même depuis le dépôt (voir plus bas).
+
 **Premier plan** (port 8080 par défaut) :
 
 ```bash
