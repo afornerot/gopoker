@@ -18,6 +18,8 @@ Estimation agile en temps réel basée sur la suite de Fibonacci, en Go.
 ## Démarrage avec le binaire
 
 Le binaire `gopoker` est un exécutable autonome : pas de dépendance, pas d'installation.
+Compilé en statique (`CGO_ENABLED=0`), il tourne sur n'importe quelle distribution
+Linux, y compris les plus minimalistes (Alpine, containers sans glibc), ainsi que macOS et Windows.
 
 **Téléchargement** : les binaires des releases sont disponibles sur
 <https://github.com/afornerot/gopoker/releases> (choisir la version, puis le
