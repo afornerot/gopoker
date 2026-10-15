@@ -15,36 +15,72 @@ Estimation agile en temps réel basée sur la suite de Fibonacci, en Go.
 - Redirection auto vers l'accueil depuis une URL de salon périmée
 - Design responsive, notifications toasts, reconnexion automatique
 
-## Démarrage
+## Démarrage avec le binaire
+
+Le binaire `gopoker` est un exécutable autonome : pas de dépendance, pas d'installation.
+
+**Premier plan** (port 8080 par défaut) :
 
 ```bash
-task run              # Lance sur http://localhost:8080
-PORT=9000 task run    # Port personnalisé
+./gopoker
+# → Serveur démarré sur :8080  →  http://localhost:8080
 ```
 
-Ou directement : `./gopoker`.
-
-## Tâches
+**Changer le port** : la variable d'environnement `PORT` est lue au démarrage.
 
 ```bash
-task run-daemon       # Compile + lance en arrière-plan (logs: gopoker.log)
-task stop-daemon      # Arrête le daemon
-task build            # Compile le binaire gopoker
-task dev              # Compile puis lance
-task test             # Tests E2E
-task test-short       # Tests E2E rapide (sans cache)
-task clean            # Supprime le binaire
+PORT=9000 ./gopoker     # → http://localhost:9000
 ```
 
-## Release GitHub
-
-Un workflow `.github/workflows/release.yml` compile les binaires pour
-`linux / darwin / windows` en `amd64` et `arm64` et publie une release GitHub
-à chaque tag `v*` :
+**Mode daemon** (arrière-plan, logs dans `gopoker.log`) :
 
 ```bash
-git tag v1.0
-git push origin v1.0
+./gopoker > gopoker.log 2>&1 &
+echo $!                  # affiche le PID à retenir
+tail -f gopoker.log      # suivre les logs
+```
+
+**Daemon avec port personnalisé** :
+
+```bash
+PORT=9000 ./gopoker > gopoker.log 2>&1 &
+```
+
+**Arrêter le daemon** :
+
+```bash
+kill <PID>               # par son PID
+pkill -f gopoker         # ou par nom de process
+```
+
+## Démarrage avec le dépôt
+
+Depuis un clone du dépôt, `task` (go-task) gère le build et le lancement.
+
+```bash
+git clone https://github.com/afornerot/gopoker.git
+cd gopoker
+task build        # compile le binaire gopoker
+task run          # lance (port 8080)
+PORT=9000 task run
+```
+
+### Tâches disponibles
+
+```bash
+task run-daemon       # compile + lance en arrière-plan (logs: gopoker.log)
+task stop-daemon      # arrête le daemon
+task build            # compile le binaire gopoker
+task dev              # compile puis lance
+task test             # tests E2E
+task test-short       # tests E2E rapide (sans cache)
+task clean            # supprime le binaire
+```
+
+## Tests
+
+```bash
+task test             # tests E2E (création salon, votes, révélation, admin)
 ```
 
 ## Stack
