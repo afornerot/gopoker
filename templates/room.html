@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Poker Planning{{if .RoomName}} - {{.RoomName}}{{end}}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="container">
+  <header class="header">
+    <div class="header-left">
+      <span class="logo-sm">🃏</span>
+      <div class="header-titles">
+        <h1>Poker Planning</h1>
+        {{if .RoomName}}<span class="room-name">{{.RoomName}}</span>{{end}}
+      </div>
+    </div>
+    <div class="header-right">
+      <button class="btn-copy" onclick="copyLink()">🔗 Copier le lien</button>
+    </div>
+  </header>
+
+  <div id="join-screen" class="join-screen">
+    <div class="join-card">
+      {{if .RoomName}}<div class="join-room-name">Salon : {{.RoomName}}</div>{{end}}
+      <h2>Rejoindre le salon</h2>
+      <p>Entrez votre prénom pour participer</p>
+      <form class="join-form" onsubmit="event.preventDefault(); joinRoom();">
+        <input type="text" id="name-input" placeholder="Votre prénom" maxlength="20" autofocus
+               {{if .IsAdmin}}value="Admin"{{end}}>
+        <button type="submit" class="btn-primary">Rejoindre</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="room-content" class="room-content hidden">
+    <section class="participants-section">
+      <h2>Participants</h2>
+      <div id="participants-grid" class="participants-grid"></div>
+    </section>
+
+    <section id="synthesis" class="synthesis-section hidden"></section>
+
+    <div class="bottom-bar">
+      <section class="voting-section">
+        <div class="voting-head">
+          <h2>Estimation</h2>
+          <p class="vote-hint" id="vote-hint">Sélectionnez une carte pour voter</p>
+        </div>
+        <div class="fibonacci-grid" id="fib-grid">
+          {{range .Fibonacci}}
+          <button class="fib-card" data-value="{{.}}" onclick="sendVote('{{.}}')">{{.}}</button>
+          {{end}}
+        </div>
+      </section>
+
+      <div id="admin-controls" class="admin-controls hidden">
+        <button id="btn-reveal" class="btn-reveal" onclick="revealVotes()">Révéler les votes</button>
+        <button id="btn-reset" class="btn-reset" onclick="resetVotes()">Nouveau vote</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script>
+const roomID = "{{.ID}}";
+const adminToken = "{{.AdminToken}}";
+const isAdmin = {{.IsAdmin}};
+
+let ws = null;
+let myName = "";
+let currentVote = null;
+let participants = [];
+let revealed = false;
+let myIsAdmin = isAdmin;
+
+function copyLink() {
+  const url = window.location.origin + '/room/' + roomID;
+  const btn = document.querySelector('.btn-copy');
+
+  const done = () => {
+    btn.textContent = '🔗 Copié !';
+    setTimeout(() => btn.textContent = '🔗 Copier le lien', 2000);
+  };
+
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(url).then(done).catch(() => fallbackCopy(url, btn, done));
+  } else {
+    fallbackCopy(url, btn, done);
+  }
+}
+
+function fallbackCopy(text, btn, done) {
+  const tmp = document.createElement('textarea');
+  tmp.value = text;
+  tmp.style.position = 'fixed';
+  tmp.style.opacity = '0';
+  document.body.appendChild(tmp);
+  tmp.select();
+  try {
+    document.execCommand('copy');
+    done();
+  } catch (e) {
+    btn.textContent = '🔗 Copier le lien';
+  }
+  document.body.removeChild(tmp);
+}
+
+function joinRoom() {
+  const input = document.getElementById('name-input');
+  const name = input.value.trim();
+  if (!name) return;
+
+  myName = name;
+  document.getElementById('join-screen').classList.add('hidden');
+  document.getElementById('room-content').classList.remove('hidden');
+
+  connectWebSocket();
+}
+
+let shouldReconnect = true;
+
+function connectWebSocket() {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = `${protocol}//${window.location.host}/ws/${roomID}?name=${encodeURIComponent(myName)}`;
+  const finalUrl = adminToken ? url + `&admin=${encodeURIComponent(adminToken)}` : url;
+
+  shouldReconnect = true;
+  ws = new WebSocket(finalUrl);
+
+  ws.onmessage = function(event) {
+    const msg = JSON.parse(event.data);
+    handleMessage(msg);
+  };
+
+  ws.onclose = function() {
+    if (shouldReconnect) {
+      showToast('Connexion perdue. Reconnexion...');
+      setTimeout(connectWebSocket, 2000);
+    }
+  };
+
+  ws.onerror = function() {
+    ws.close();
+  };
+}
+
+function handleMessage(msg) {
+  switch (msg.type) {
+    case 'error':
+      shouldReconnect = false;
+      showToast(msg.message);
+      document.getElementById('join-screen').classList.remove('hidden');
+      document.getElementById('room-content').classList.add('hidden');
+      break;
+    case 'state':
+      participants = msg.participants || [];
+      revealed = msg.revealed || false;
+
+      const me = participants.find(p => p.name === myName);
+      if (me) myIsAdmin = !!me.isAdmin;
+
+      renderParticipants();
+      renderVotingState();
+      renderSynthesis();
+      break;
+    case 'user_joined':
+      showToast(`${msg.name} a rejoint le salon`);
+      break;
+    case 'user_left':
+      showToast(`${msg.name} a quitté le salon`);
+      break;
+  }
+}
+
+function renderParticipants() {
+  const grid = document.getElementById('participants-grid');
+  grid.innerHTML = '';
+
+  const sorted = participants.slice().sort((a, b) => a.name.localeCompare(b.name));
+
+  sorted.forEach(p => {
+    const card = document.createElement('div');
+    const isMe = p.name === myName;
+
+    let statusClass = 'status-pending';
+    let statusText = 'En attente de vote';
+    if (!p.connected) {
+      statusClass = 'status-offline';
+      statusText = 'Déconnecté';
+    } else if (p.hasVoted) {
+      statusClass = 'status-voted';
+      statusText = 'A voté';
+    }
+
+    card.className = `participant-card ${statusClass}${isMe ? ' me' : ''}${p.isAdmin ? ' admin' : ''}`;
+
+    const initial = p.name.charAt(0).toUpperCase();
+    const colors = ['#4f46e5','#0891b2','#059669','#d97706','#dc2626','#7c3aed','#db2777','#2563eb'];
+    const color = colors[p.name.length % colors.length];
+
+    const voteDisplay = revealed && p.hasVoted && p.vote !== null
+      ? `<div class="p-vote visible">${escHtml(p.vote)}</div>`
+      : `<div class="p-vote hidden">&nbsp;</div>`;
+
+    const crown = p.isAdmin ? '<span class="crown" title="Admin du salon">👑</span>' : '';
+
+    card.innerHTML = `
+      <div class="avatar" style="background:${color}">${initial}</div>
+      <div class="p-info">
+        <div class="p-name">${crown}${escHtml(p.name)}</div>
+        <div class="p-status-line"><span class="p-status-dot ${statusClass}"></span>${statusText}</div>
+      </div>
+      ${voteDisplay}
+      ${isMe ? '<span class="you-badge">vous</span>' : ''}
+    `;
+
+    if (myIsAdmin && !isMe) {
+      if (!p.connected) {
+        const btn = document.createElement('button');
+        btn.className = 'p-action p-action-remove';
+        btn.title = `Retirer ${p.name} du salon`;
+        btn.textContent = '🗑';
+        btn.addEventListener('click', () => removeParticipant(p.name));
+        card.appendChild(btn);
+      } else if (!p.isAdmin) {
+        const btn = document.createElement('button');
+        btn.className = 'p-action p-action-promote';
+        btn.title = `Transférer l'admin à ${p.name}`;
+        btn.textContent = '⭐';
+        btn.addEventListener('click', () => promoteParticipant(p.name));
+        card.appendChild(btn);
+      }
+    }
+
+    grid.appendChild(card);
+  });
+
+  equalizeCardWidths();
+}
+
+function removeParticipant(name) {
+  if (!ws || ws.readyState !== WebSocket.OPEN || !myIsAdmin) return;
+  ws.send(JSON.stringify({type: 'remove', name}));
+}
+
+function promoteParticipant(name) {
+  if (!ws || ws.readyState !== WebSocket.OPEN || !myIsAdmin) return;
+  ws.send(JSON.stringify({type: 'promote', name}));
+  showToast(`Admin transféré à ${name}`);
+}
+
+function equalizeCardWidths() {
+  const grid = document.getElementById('participants-grid');
+  const cards = Array.from(grid.children);
+  if (cards.length === 0) return;
+
+  let max = 0;
+  cards.forEach(c => {
+    c.style.flex = '0 1 auto';
+    c.style.width = '';
+  });
+  cards.forEach(c => { max = Math.max(max, c.scrollWidth); });
+
+  cards.forEach(c => {
+    c.style.flex = '0 0 ' + max + 'px';
+    c.style.width = max + 'px';
+  });
+}
+
+function renderSynthesis() {
+  const section = document.getElementById('synthesis');
+  if (!revealed) {
+    section.classList.add('hidden');
+    section.innerHTML = '';
+    return;
+  }
+
+  const groups = {};
+  participants.forEach(p => {
+    if (p.hasVoted && p.vote !== null) {
+      const v = String(p.vote);
+      if (!groups[v]) groups[v] = [];
+      groups[v].push(p);
+    }
+  });
+
+  const entries = Object.keys(groups)
+    .map(v => ({value: v, voters: groups[v]}))
+    .sort((a, b) => b.voters.length - a.voters.length);
+
+  if (entries.length === 0) {
+    section.classList.add('hidden');
+    section.innerHTML = '';
+    return;
+  }
+
+  const absent = participants.filter(p => !(p.hasVoted && p.vote !== null));
+
+  section.classList.remove('hidden');
+  const max = entries[0].voters.length;
+
+  const byName = (a, b) => a.name.localeCompare(b.name);
+
+  section.innerHTML = `
+    <div class="synthesis-title">Synthèse des votes</div>
+    <div class="synthesis-list">
+      ${entries.map(e => `
+        <div class="synthesis-item">
+          <span class="synthesis-value">${escHtml(e.value)}</span>
+          <div class="synthesis-main">
+            <div class="synthesis-bar-line">
+              <div class="synthesis-bar-wrap">
+                <div class="synthesis-bar" style="width:${(e.voters.length / max) * 100}%"></div>
+              </div>
+              <span class="synthesis-count">${e.voters.length} votant${e.voters.length > 1 ? 's' : ''}</span>
+            </div>
+            <div class="synthesis-tags">
+              ${e.voters.slice().sort(byName).map(p =>
+                `<span class="synthesis-tag${p.name === myName ? ' me' : ''}">${escHtml(p.name)}</span>`).join('')}
+            </div>
+          </div>
+        </div>`).join('')}
+      ${absent.length > 0 ? `
+        <div class="synthesis-item synthesis-absent">
+          <span class="synthesis-value">—</span>
+          <div class="synthesis-main">
+            <div class="synthesis-tags">
+              ${absent.slice().sort(byName).map(p =>
+                `<span class="synthesis-tag muted${p.name === myName ? ' me' : ''}">${escHtml(p.name)}</span>`).join('')}
+            </div>
+          </div>
+        </div>` : ''}
+    </div>`;
+}
+
+function renderVotingState() {
+  const fibCards = document.querySelectorAll('.fib-card');
+  fibCards.forEach(c => c.classList.remove('selected'));
+
+  const me = participants.find(p => p.name === myName);
+
+  if (me && me.hasVoted) {
+    if (revealed && me.vote !== null) {
+      currentVote = me.vote;
+    }
+  } else {
+    currentVote = null;
+  }
+
+  if (currentVote !== null) {
+    const selected = document.querySelector(`.fib-card[data-value="${CSS.escape(currentVote)}"]`);
+    if (selected) selected.classList.add('selected');
+  }
+
+  document.getElementById('vote-hint').textContent = revealed
+    ? 'Vous pouvez modifier votre vote'
+    : 'Sélectionnez une carte pour voter';
+
+  const votingSection = document.querySelector('.voting-section');
+  votingSection.classList.toggle('revealed', revealed);
+
+  updateAdminUI();
+}
+
+function updateAdminUI() {
+  const controls = document.getElementById('admin-controls');
+  if (controls) controls.classList.toggle('hidden', !myIsAdmin);
+  if (myIsAdmin) {
+    document.getElementById('btn-reveal').style.display = revealed ? 'none' : 'inline-block';
+    document.getElementById('btn-reset').style.display = revealed ? 'inline-block' : 'none';
+  }
+}
+
+function sendVote(value) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+  document.querySelectorAll('.fib-card').forEach(c => c.classList.remove('selected'));
+
+  const me = participants.find(p => p.name === myName);
+  if (me && me.hasVoted && me.vote === value) {
+    currentVote = null;
+    ws.send(JSON.stringify({type: 'vote', value: null}));
+  } else {
+    currentVote = value;
+    const card = document.querySelector(`.fib-card[data-value="${CSS.escape(value)}"]`);
+    if (card) card.classList.add('selected');
+    ws.send(JSON.stringify({type: 'vote', value: value}));
+  }
+}
+
+function revealVotes() {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({type: 'reveal'}));
+  }
+}
+
+function resetVotes() {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({type: 'reset'}));
+  }
+}
+
+function showToast(message) {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.classList.remove('hidden');
+  toast.classList.add('show');
+  setTimeout(() => {
+    toast.classList.remove('show');
+    toast.classList.add('hidden');
+  }, 3000);
+}
+
+function escHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+</script>
+</body>
+</html>

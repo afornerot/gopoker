@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Tests E2E
+        run: go test -count=1 -timeout 60s ./...
+
+  build:
+    needs: test
+    strategy:
+      matrix:
+        os: [linux, darwin, windows]
+        arch: [amd64, arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build binaire
+        shell: bash
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          SUFFIX=""
+          if [ "$GOOS" = "windows" ]; then SUFFIX=".exe"; fi
+          mkdir -p dist
+          go build -trimpath -ldflags "-s -w" -o "dist/gopoker-${GOOS}-${GOARCH}${SUFFIX}" .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gopoker-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Télécharger les binaires
+        uses: actions/download-artifact@v4
+        with:
+          path: binaries
+          merge-multiple: true
+
+      - name: Créer la release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: binaries/gopoker-*
+          generate_release_notes: true

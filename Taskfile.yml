@@ -1,0 +1,53 @@
+version: '3'
+
+tasks:
+  default:
+    deps: [build]
+
+  build:
+    desc: "Compile le binaire"
+    cmds:
+      - go build -o gopoker .
+
+  run:
+    desc: "Lance le serveur | PORT=<port> (défaut: 8080)"
+    cmds:
+      - go run .
+    env:
+      PORT: '{{.PORT | default "8080"}}'
+
+  dev:
+    desc: "Compile puis lance | PORT=<port> (défaut: 8080)"
+    cmds:
+      - go build -o gopoker . && ./gopoker
+    env:
+      PORT: '{{.PORT | default "8080"}}'
+
+  run-daemon:
+    desc: "Compile et lance en arrière-plan (daemon) | PORT=<port> (défaut: 8080), logs dans gopoker.log"
+    cmds:
+      - go build -o gopoker .
+      - "./gopoker > gopoker.log 2>&1 &"
+      - "echo 'Poker lancé en daemon. Logs: ./gopoker.log'"
+    env:
+      PORT: '{{.PORT | default "8080"}}'
+
+  stop-daemon:
+    desc: "Arrête le daemon poker"
+    cmds:
+      - pkill -f '^./gopoker' || echo "Aucun daemon poker en cours"
+
+  test:
+    desc: "Lance les tests E2E"
+    cmds:
+      - go test -v -count=1 -timeout 30s .
+
+  test-short:
+    desc: "Tests E2E rapide (sans cache)"
+    cmds:
+      - go test -v -count=1 -run TestE2E -timeout 30s .
+
+  clean:
+    desc: "Supprime le binaire"
+    cmds:
+      - rm -f gopoker

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Poker Planning</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="landing">
+<main class="hero">
+  {{if .Error}}
+  <div class="notice">{{.Error}}</div>
+  {{end}}
+  <div class="hero-card">
+    <div class="logo">🃏</div>
+    <h1>Poker Planning</h1>
+    <p class="subtitle">Estimez vos stories en équipe, en temps réel</p>
+    <form class="create-form" action="/create" method="post">
+      <input type="text" name="name" placeholder="Nom du salon (optionnel)" maxlength="40" autocomplete="off">
+      <button type="submit" class="btn-primary btn-large">Créer un salon</button>
+    </form>
+  </div>
+</main>
+
+<section class="rooms-section">
+  <div class="rooms-inner">
+    <h2>Salons en cours</h2>
+    {{if .Rooms}}
+    <div class="rooms-list">
+      {{range .Rooms}}
+      <div class="room-item">
+        <div class="room-item-info">
+          <span class="room-item-name">{{.Name}}</span>
+          <span class="room-item-meta">
+            {{.ParticipantCount}} participant{{if ne .ParticipantCount 1}}s{{end}}
+            {{if .AdminName}} · {{.AdminName}}{{end}}
+          </span>
+        </div>
+        <a class="btn-join" href="/room/{{.ID}}">Rejoindre</a>
+      </div>
+      {{end}}
+    </div>
+    {{else}}
+    <p class="no-rooms">Aucun salon actif pour le moment. Créez-en un pour commencer.</p>
+    {{end}}
+  </div>
+</section>
+</body>
+</html>

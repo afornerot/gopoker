@@ -1,0 +1,12 @@
+# Binaires
+/gopoker
+/poker
+
+# Logs
+*.log
+
+# Dist de release
+/dist/
+
+# Système
+.DS_Store
